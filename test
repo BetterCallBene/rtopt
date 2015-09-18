@@ -1,0 +1,748 @@
+c 		Letzter Stand: 272 while -> done in Matlab Zeile : 796
+c		subroutine sode15s(NEQ, NCTR, T0, Y0, YP0, u, atol, rtol, Fcn, Jcn)
+c			implicit none
+c 			mkl functions			
+c			external DGESV
+
+c 			fortran 77 Funktion
+c			double precision abs
+
+c 			Uebergabeparameter
+c			external Fcn, Jcn
+
+			integer NEQ, NCTR
+			double precision T0, Y0, YP0, u, atol, rtol
+
+c 			Zaehlervariable
+			integer Iter, m, k, nfevals, nsolves, nfailed, npds
+	1			ndecomps, j, klast, kopt, nsteps		
+c 			parameter integer maxIt, Iter, k
+			integer maxIt
+c			parameter double precision
+c			Gamma_k, alpha, invGa		
+			double precision G, alpha, invGa, erconst
+
+c 			helper variable 
+			logical done, tooslow, gotynew, havrate, Jcurrent
+			integer E, maxk, nconhk
+			double precision tnew, ynew, ydotnew, h, hinvGak, difkp1, del,
+	1			dfdy, rhs, Miter, threshold, invwt, minnrm, dif, t,
+	2			tfinal, pred, newnrm, rate, errit, oldnrm, hmin, absh,
+	3			abshlast, tdir, err, hopt, errkm1, hkm1, temp, errkp1,
+	4			hkp1, hmax, at_hmin
+c 			parameter integer
+			parameter(maxIt = 4, maxk = 5)
+
+c 			Uebergabeparameter dimension
+			dimension T0(2), Y0(NEQ), YP0(NEQ), u(NCTR)			
+
+c 			helper dimension
+			dimension ynew(NEQ), ydotnew(NEQ), difkp1(NEQ), del(NEQ),
+	1			rhs(NEQ), E(NEQ, NEQ), dfdy(NEQ, NEQ), Miter(NEQ, NEQ),
+	2			dif(NEQ, maxk + 2), invwt(NEQ), pred(NEQ)
+
+c			parameter dimension
+			dimension G(5), alpha(5), invGa(5), erconst(5)
+
+c			parameter declartion array
+			parameter(G = (/ 1.0, 3.0/2.0, 11.0/6.0, 25.0/12.0, 137.0/60.0 /), 
+	1			alpha = (/-37.0/200.0, -1.0/9.0, -0.0823, -0.0415, 0.0/),
+	2			invGa = 1.0 / (G * (1.0 - alpha), 		
+c 			ToDo: Verify than
+	3			erconst = alpha * G + (1.0 / (2:6)))
+c			Einheitsmatrix
+			E = 0
+			do Iter = 1, NEQ
+				E(Iter, Iter) = 1
+			enddo
+
+			threshold = atol / rtol;
+
+c 			BDFk ? k			
+c 			start with BDF1
+c			k = 1
+c			m = 1
+c
+c			dif(:, 1) = YP0
+c
+c			call Jcn(NEQ, t, Y, u, 0, 0, dfdy, NEQ)
+c
+c			hinvGak = h * invGa(k)
+c			Miter = (E - hinvGak * dfdy)
+
+			% Stats
+			nsteps   = 0
+			nfailed  = 0
+			nfevals  = 0 
+			npds     = 0
+			ndecomps = 0
+			nsolves  = 0
+
+c			% Output		
+c			sol = []; kvec = []; dif3d = []; 
+c			if output_sol
+c  sol.solver = solver_name;
+c  sol.extdata.odefun = ode;
+c  sol.extdata.options = options;                       
+c  sol.extdata.varargin = varargin;  
+c end  
+
+c % Handle solver arguments
+c [neq, tspan, ntspan, next, t0, tfinal, tdir, y0, f0, odeArgs, odeFcn, ...
+c options, threshold, rtol, normcontrol, normy, hmax, htry, htspan] = ...
+c    odearguments(FcnHandlesUsed, solver_name, ode, tspan, y0, options, varargin);
+c nfevals = nfevals + 1;
+c one2neq = (1:neq);
+
+c % Handle the output
+c if nargout > 0
+c  outputFcn = odeget(options,'OutputFcn',[],'fast');
+c else
+c  outputFcn = odeget(options,'OutputFcn',@odeplot,'fast');
+c end
+c outputArgs = {};      
+c if isempty(outputFcn)
+c  haveOutputFcn = false;
+c else
+c  haveOutputFcn = true;
+c  outputs = odeget(options,'OutputSel',1:neq,'fast');
+c  if isa(outputFcn,'function_handle')  
+c    % With MATLAB 6 syntax pass additional input arguments to outputFcn.
+c    outputArgs = varargin;
+c  end  
+c end
+c refine = max(1,odeget(options,'Refine',1,'fast'));
+c if ntspan > 2
+c  outputAt = 'RequestedPoints';         % output only at tspan points
+c elseif refine <= 1
+c  outputAt = 'SolverSteps';             % computed points, no refinement
+c else
+c  outputAt = 'RefinedSteps';            % computed points, with refinement
+c  S = (1:refine-1) / refine;
+c end
+c printstats = strcmp(odeget(options,'Stats','off','fast'),'on');
+
+c % Handle the event function 
+c[haveEventFcn,eventFcn,eventArgs,valt,teout,yeout,ieout] = ...
+c    odeevents(FcnHandlesUsed,odeFcn,t0,y0,options,varargin);
+
+c% Handle the mass matrix
+c[Mtype, Mt, Mfun, Margs, dMoptions] = odemass(FcnHandlesUsed,odeFcn,t0,y0,...
+                                              options,varargin);
+
+c % Non-negative solution components
+c idxNonNegative = odeget(options,'NonNegative',[],'fast');
+c nonNegative = ~isempty(idxNonNegative);
+c if nonNegative  
+c  if Mtype == 0
+c    % Explicit ODE -- modify the derivative function
+c    [odeFcn,thresholdNonNegative] = odenonnegative(odeFcn,y0,threshold,idxNonNegative);
+c    f0 = feval(odeFcn,t0,y0,odeArgs{:});
+c    nfevals = nfevals + 1;
+c  else
+c    % Linearly implicit ODE/DAE -- ignore non-negativity constraints
+c    warning(message('MATLAB:ode15s:NonNegativeIgnoredForLinearlyImplicitSystems'));   
+c    nonNegative = false;
+c    idxNonNegative = [];
+c  end  
+c end
+
+c % Handle the Jacobian
+c [Jconstant,Jac,Jargs,Joptions] = ...
+c    odejacobian(FcnHandlesUsed,odeFcn,t0,y0,options,varargin);
+c Janalytic = isempty(Joptions);
+    
+			t = T0;
+			y = Y0;
+
+			yp0_OK = false;
+DAE = false;
+RowScale = [];
+if Mtype > 0
+  nz = nnz(Mt);
+  if nz == 0
+    error(message('MATLAB:ode15s:MassMatrixAllZero'))
+  end
+   
+  Msingular = odeget(options,'MassSingular','maybe','fast');
+  switch Msingular
+    case 'no',     DAE = false;
+    case 'yes',    DAE = true;
+    case 'maybe',  DAE = (eps*nz*condest(Mt) > 1);       
+  end
+   
+  if DAE
+    yp0 = odeget(options,'InitialSlope',[],'fast');
+    if isempty(yp0)
+      yp0_OK = false;
+      yp0 = zeros(neq,1);  
+    else
+      yp0 = yp0(:);
+      if length(yp0) ~= neq
+        error(message('MATLAB:ode15s:YoYPoLengthMismatch'));
+      end
+      % Test if (y0,yp0) are consistent enough to accept.
+      yp0_OK = (norm(Mt*yp0 - f0) <= 1e-3*rtol*max(norm(Mt*yp0),norm(f0)));
+    end   
+    if ~yp0_OK           % Must compute ICs, so classify them.
+      if Mtype >= 3  % state dependent
+        ICtype = 3;
+      else  % M, M(t)
+        % Test for a diagonal mass matrix.
+        [r,c] = find(Mt);
+        if isequal(r,c)   % diagonal
+          ICtype = 1;
+        elseif ~issparse(Mt) % not diagonal but full
+          ICtype = 2;
+        else  % sparse, not diagonal
+          ICtype = 3;
+        end
+      end      
+    end
+  end
+end
+Mcurrent = true;
+Mtnew = Mt;
+
+% if not set via 'options', initialize constant Jacobian here
+if Jconstant 
+  if isempty(Jac) % use odenumjac
+    [Jac,Joptions.fac,nF] = odenumjac(odeFcn, {t0,y0,odeArgs{:}}, f0, Joptions);    
+    nfevals = nfevals + nF;
+    npds = npds + 1;
+  elseif ~isa(Jac,'numeric')  % not been set via 'options'  
+    Jac = feval(Jac,t0,y0,Jargs{:}); % replace by its value
+    npds = npds + 1;
+  end
+end
+
+maxk = odeget(options,'MaxOrder',5,'fast');
+bdf = strcmp(odeget(options,'BDF','off','fast'),'on');
+
+% Initialize method parameters.
+G = [1; 3/2; 11/6; 25/12; 137/60];
+if bdf
+  alpha = [0; 0; 0; 0; 0];
+else
+  alpha = [-37/200; -1/9; -0.0823; -0.0415; 0];
+end
+invGa = 1 ./ (G .* (1 - alpha));
+erconst = alpha .* G + (1 ./ (2:6)');
+difU = [ -1, -2, -3, -4,  -5;           % difU is its own inverse!
+          0,  1,  3,  6,  10;
+          0,  0, -1, -4, -10;
+          0,  0,  0,  1,   5;
+          0,  0,  0,  0,  -1 ];
+maxK = 1:maxk;
+[kJ,kI] = meshgrid(maxK,maxK);
+difU = difU(maxK,maxK);
+maxit = 4;
+
+% Adjust the warnings.
+warnoffId = { 'MATLAB:singularMatrix', 'MATLAB:nearlySingularMatrix'}; 
+for i = 1:length(warnoffId)    
+  warnstat(i) = warning('query',warnoffId{i});
+  warnoff(i) = warnstat(i);
+  warnoff(i).state = 'off';
+end
+
+% Get the initial slope yp. For DAEs the default is to compute
+% consistent initial conditions.
+if DAE && ~yp0_OK
+  if ICtype < 3
+    [y,yp,f0,dfdy,nFE,nPD,Jfac] = daeic12(odeFcn,odeArgs,t,ICtype,Mt,y,yp0,f0,...
+                                          rtol,Jconstant,Jac,Jargs,Joptions); 
+  else    
+    [y,yp,f0,dfdy,nFE,nPD,Jfac,dMfac] = daeic3(odeFcn,odeArgs,tspan,htry,Mtype,Mt,Mfun,...
+                                               Margs,dMoptions,y,yp0,f0,rtol,Jconstant,...
+                                               Jac,Jargs,Joptions);   
+    if ~isempty(dMoptions)
+      dMoptions.fac = dMfac;
+    end        
+  end  
+  if ~isempty(Joptions)
+    Joptions.fac = Jfac;
+  end    
+  nfevals = nfevals + nFE;
+  npds = npds + nPD;
+  if Mtype >= 3
+    Mt = feval(Mfun,t,y,Margs{:});
+    Mtnew = Mt;
+    Mcurrent = true;
+  end
+else
+  if Mtype == 0 
+    yp = f0;
+  elseif DAE && yp0_OK
+    yp = yp0;
+  else
+    if issparse(Mt)
+      [L,U,P,Q,R] = lu(Mt);            
+      yp = Q * (U \ (L \ (P * (R \ f0))));      
+    else
+      [L,U,p] = lu(Mt,'vector');      
+      yp = U \ (L \ f0(p));
+    end  
+    ndecomps = ndecomps + 1;              
+    nsolves = nsolves + 1;                
+  end
+    
+  if Jconstant
+    dfdy = Jac;
+  elseif Janalytic
+    dfdy = feval(Jac,t,y,Jargs{:});     
+    npds = npds + 1;                            
+  else   % Joptions not empty
+    [dfdy,Joptions.fac,nF] = odenumjac(odeFcn, {t,y,odeArgs{:}}, f0, Joptions);  
+    nfevals = nfevals + nF;    
+    npds = npds + 1;                            
+  end     
+end
+Jcurrent = true;
+
+% hmin is a small number such that t + hmin is clearly different from t in
+% the working precision, but with this definition, it is 0 if t = 0.
+hmin = 16*eps*abs(t);
+
+if isempty(htry)
+  % Compute an initial step size h using yp = y'(t).
+  if normcontrol
+    wt = max(normy,threshold);
+    rh = 1.25 * (norm(yp) / wt) / sqrt(rtol);  % 1.25 = 1 / 0.8
+  else
+    wt = max(abs(y),threshold);
+    rh = 1.25 * norm(yp ./ wt,inf) / sqrt(rtol);
+  end
+  absh = min(hmax, htspan);
+  if absh * rh > 1
+    absh = 1 / rh;
+  end
+  absh = max(absh, hmin);
+  
+  if ~DAE
+    % The error of BDF1 is 0.5*h^2*y''(t), so we can determine the optimal h.
+    h = tdir * absh;
+    tdel = (t + tdir*min(sqrt(eps)*max(abs(t),abs(t+h)),absh)) - t;
+    f1 = feval(odeFcn,t+tdel,y,odeArgs{:});
+    nfevals = nfevals + 1;                
+    dfdt = (f1 - f0) ./ tdel;
+    DfDt = dfdt + dfdy*yp;
+    if normcontrol
+      if Mtype > 0 
+          if issparse(Mt)  
+              rh = 1.25 * sqrt(0.5 * (norm(U \ (L \ (P * (R \ DfDt)))) / wt) / rtol);
+          else
+              rh = 1.25 * sqrt(0.5 * (norm(U \ (L \ DfDt(p))) / wt) / rtol);
+          end
+      else
+        rh = 1.25 * sqrt(0.5 * (norm(DfDt) / wt) / rtol);
+      end
+    else
+      if Mtype > 0
+        if issparse(Mt)
+          rh = 1.25*sqrt(0.5*norm((Q * (U \ (L \ (P * (R \ DfDt))))) ./ wt,inf) / rtol);
+        else  
+          rh = 1.25*sqrt(0.5*norm((U \ (L \ DfDt(p))) ./ wt,inf) / rtol);
+        end  
+      else
+        rh = 1.25 * sqrt(0.5 * norm( DfDt ./ wt,inf) / rtol);
+      end
+    end
+    absh = min(hmax, htspan);
+    if absh * rh > 1
+      absh = 1 / rh;
+    end
+    absh = max(absh, hmin);
+  end
+else
+  absh = min(hmax, max(hmin, htry));
+end
+h = tdir * absh;
+
+% Initialize.
+k = 1;                                  % start at order 1 with BDF1
+K = 1;                                  % K = 1:k
+klast = k;
+abshlast = absh;
+
+dif = zeros(neq,maxk+2);
+dif(:,1) = h * yp;
+
+hinvGak = h * invGa(k);
+nconhk = 0;                             % steps taken with current h and k
+
+Miter = Mt - hinvGak * dfdy;
+
+% Account for strongly state-dependent mass matrix.
+if Mtype == 4
+  psi = dif(:,K) * (G(K) * invGa(k));
+  [dMpsidy,dMoptions.fac] = odenumjac(@odemxv, {Mfun,t,y,psi,Margs{:}}, Mt*psi, ...    
+                                      dMoptions);      
+  Miter = Miter + dMpsidy;
+end
+
+% Use explicit scaling of the equations when solving DAEs.
+if DAE
+  RowScale = 1 ./ max(abs(Miter),[],2);
+  Miter = sparse(one2neq,one2neq,RowScale) * Miter;
+end
+if issparse(Miter)
+  [L,U,P,Q,R] = lu(Miter);
+else
+  [L,U,p] = lu(Miter,'vector');  
+end  
+ndecomps = ndecomps + 1;                
+havrate = false;
+
+% Allocate memory if we're generating output.
+nout = 0;
+tout = []; yout = [];
+if nargout > 0
+  if output_sol
+    chunk = min(max(100,50*refine), refine+floor((2^11)/neq));      
+    tout = zeros(1,chunk);
+    yout = zeros(neq,chunk);
+    kvec = zeros(1,chunk);
+    dif3d = zeros(neq,maxk+2,chunk);
+  else      
+    if ntspan > 2                         % output only at tspan points
+      tout = zeros(1,ntspan);
+      yout = zeros(neq,ntspan);
+    else                                  % alloc in chunks
+      chunk = min(max(100,50*refine), refine+floor((2^13)/neq));
+      tout = zeros(1,chunk);
+      yout = zeros(neq,chunk);
+    end
+  end  
+  nout = 1;
+  tout(nout) = t;
+  yout(:,nout) = y;  
+end
+
+% Initialize the output function.
+if haveOutputFcn
+  feval(outputFcn,[t tfinal],y(outputs),'init',outputArgs{:});
+end
+
+% THE MAIN LOOP
+
+done = false;
+at_hmin = false;'
+
+
+
+
+
+
+
+
+
+
+
+
+
+c 			Compute the constant terms in the equation for ynew.
+      		
+c 			ToDO: init done, t, tfinal, h, y, havrate, rate
+c 				oldnrm, nfevals, nsolves, nfailed, npds, hmin, absh, abshlast,
+c  				ndecomps, tdir, hopt, errkm1, hkm1, hmax, at_hmin
+c          	do gotynew
+c
+c 			while()
+c 			ToDo: eps(t)			
+			hmin = 16*eps(t)
+  			absh = min(hmax, max(hmin, absh))
+  			if (absh .EQ. hmin) then
+    			if (at_hmin .EQ. .true.) then
+      				absh = abshlast 
+    			end if  
+    			at_hmin = true
+  			else
+    			at_hmin = false
+  			end if
+  			h = tdir * absh
+  
+c% Stretch the step if within 10% of tfinal-t.
+  			if (1.1*absh .GE. abs(tfinal - t)) then
+    			h = tfinal - t
+    			absh = abs(h)
+    			done = .true.
+  			end if
+  
+  			if ((absh .NE. abshlast) .OR. (k .NE. klast)) then
+c 		ToDo: cumprod  analyse 			
+c    			difRU = cumprod((kI - 1 - kJ*(absh/abshlast)) / kI) * difU
+c    			dif(:,K) = dif(:,K) * difRU(K,K);
+
+    			hinvGak = h * invGa(k)
+    			nconhk = 0
+    			Miter = Mt - hinvGak * dfdy;
+c 		ToDo lu zerlegung    			
+c      			[L,U,p] = lu(Miter,'vector');
+      
+    			ndecomps = ndecomps + 1;            
+    			havrate = false;
+  			end if
+  
+c  % LOOP FOR ADVANCING ONE STEP.			
+c 			
+98				gotynew = .false.
+80				if (gotynew .EQ. .false.) then
+				
+					psi = dif(:, m) * (G(m) * invGa(k));
+					tnew = t + h
+					if (done .EQ. .TRUE.) then
+						tnew = tfinal
+					end if
+
+					h = tnew - t
+c 			Verify this!!			
+					pred = y + sum(dif(:, m), 2) 
+					ynew = pred
+
+c 			ToDo: declartion function max, eps, normInf
+					difkp1 = 0
+					invwt = 1 / max(max(abs(y),abs(ynew)),threshold)
+		        	minnrm = 100.0*eps*normInf(ynew * invwt)
+
+		        	tooslow = .false.
+
+					do 60 Iter = 1, maxIt
+						call Fcn(NEQ, tnew, ynew, u, ydotnew)
+						rhs = hinvGak * ydotnew - (psi + difkp1)
+c 				ToDo: Ueberarbeiten -> Test Beispiel
+c 				ToDo: TooSlow? Matrix neu berechnen
+						if (Iter .EQ. 1) then
+							del = Miter
+c 									
+							CALL DGESV( N, NRHS, del, LDA, IPIV, rhs, LDB, INFO )
+c 					LU  = Miter 
+
+						else 
+c Hier mit LU zerlegung					
+						end if
+
+						difkp1 = difkp1 + del
+		        		ynew = pred + difkp1
+
+		        		newnrm = normInf(del * invwt)
+
+		        		if (newnrm .LE. minnrm) then
+		          			gotynew = .true.
+		          			goto 70
+		        		else if (iter .EQ. 1) then
+		          			if (havrate .EQ. .true.) then
+		            			errit = newnrm * rate / (1 - rate)
+		            			if (errit .LE. 0.05*rtol) then
+		              				gotynew = .true.
+		              				goto 70
+		            			end
+		          			else
+		            			rate = 0
+		          			end if
+		        		elseif (newnrm .GT. 0.9 * oldnrm) then
+		          			tooslow = .true.
+		          			goto 70
+		        		else
+		          			rate = max(0.9*rate, newnrm / oldnrm)
+		          			havrate = .true.                 
+		          			errit = newnrm * rate / (1 - rate)
+		          			if (errit .LE. 0.5*rtol) then
+		            			gotynew = .true.
+		            			goto 70
+		          			else if (iter .EQ. maxit) then
+		            			tooslow = .true.
+		            			goto 70
+		          			elseif (0.5*rtol .LT. errit*rate**(maxit-iter)) then
+		            			tooslow = .true.
+		            			goto 70
+		          			endif
+		        		endif
+		        
+		        		oldnrm = newnrm
+60					continue			
+70					nfevals = nfevals + Iter         
+		      		nsolves = nsolves + Iter
+
+		      		if (tooslow .EQ. .true.) then
+		        		nfailed = nfailed + 1         
+c Speed up the iteration by forming new linearization or reducing h.
+		        		if .NOT. Jcurrent
+c 					ToDo: Verify
+							call Jcn(NEQ, t, Y, u, 0, 0, dfdy, NEQ)
+		                    npds = npds + 1;            
+		            		Jcurrent = .true.
+		          		elseif (absh .LE. hmin) then
+c 			ToDo: Warning message        		
+c          	warning(message('MATLAB:ode15s:IntegrationTolNotMet', sprintf( '%e', t ), sprintf( '%e', hmin )));         
+c          solver_output = odefinalize(solver_name, sol,...
+c                                      outputFcn, outputArgs,...
+c                                      printstats, [nsteps, nfailed, nfevals,...
+c                                                   npds, ndecomps, nsolves],...
+c                                      nout, tout, yout,...
+c                                      haveEventFcn, teout, yeout, ieout,...
+c                                      {kvec,dif3d,idxNonNegative});
+c          ToDO: nargout benuetzen?
+c          		if nargout > 0
+c           		varargout = solver_output;
+c          		endif 
+c 				goto 100 == return 
+		          			goto 100
+		        		else
+		          			abshlast = absh
+		          			absh = max(0.3 * absh, hmin)
+		          			h = tdir * absh
+		          			done = .false.
+c   				ToDo: cumprod, Rechnung analysieren
+c         			difRU = cumprod((kI - 1 - kJ*(absh/abshlast)) ./ kI) * difU;
+c 					ToDo: Matrixmultiplikation
+c         			dif(:, m) = dif(:, m) * difRU(m, m)
+		          
+		          			hinvGak = h * invGa(k);
+c 					ToDo: Bedeutung von nconhk ? 
+		          			nconhk = 0;
+		        		endif 
+		        		Miter = E - hinvGak * dfdy
+
+c 			
+c 			LU Zerlegung hier? Berechnung der Matrix? in schleife 
+c 			Eher Berechnung neu anstupsen, in 
+c           [L,U,p] = lu(Miter,'vector');
+		        		ndecomps = ndecomps + 1      
+		        		havrate = .false.
+
+		        	endif
+		        	goto 80
+		       	endif
+		       	err = normInf(difkp1 * invwt) * erconst(k)
+		       	if (err .GT. rtol) then
+	      			nfailed = nfailed + 1
+	      			if (absh .LE. hmin) then
+c      				ToDO: Error managment
+c        			warning(message('MATLAB:ode15s:IntegrationTolNotMet', sprintf( '%e', t ), sprintf( '%e', hmin )));
+c			        solver_output = odefinalize(solver_name, sol,...
+c                                    outputFcn, outputArgs,...
+c                                    printstats, [nsteps, nfailed, nfevals,...
+c                                                 npds, ndecomps, nsolves],...
+c                                    nout, tout, yout,...
+c                                    haveEventFcn, teout, yeout, ieout,...
+c                                    {kvec,dif3d,idxNonNegative});          
+c       			if nargout > 0
+c          				varargout = solver_output;
+c       			end  
+c        		return;
+						goto 100
+	      			end if
+	      
+	      			abshlast = absh
+	      			if (nofailed .EQ. .true.) then
+	        			nofailed = .false.
+	        			hopt = absh * max(0.1, 0.833*(rtol/err)**(1.0 / (k + 1.0)))
+	        			if (k .GT. 1) then
+	          			
+	            			errkm1 = normInf((dif(:,k) + difkp1) .* invwt) * erconst(k - 1)
+	          			
+	          				hkm1 = absh * max(0.1, 0.769*(rtol/errkm1)^(1.0/k))
+	          				if hkm1 .GT. hopt
+	            				hopt = min(absh,hkm1)
+	            				k = k - 1
+	c 	 					ToDo: verfiy this				            			
+	            				m = 1:k
+	          				end if
+	        			endif
+	        			absh = max(hmin, hopt)
+	      			else
+	        			absh = max(hmin, 0.5 * absh)
+	      			endif
+	      			h = tdir * absh
+	      			if (absh .LT. abshlast) then
+						done = .false.
+					endif
+	c 				ToDo: Analyse Berchnung      
+	c      			difRU = cumprod((kI - 1 - kJ*(absh/abshlast)) ./ kI) * difU;
+	c      			dif(:,K) = dif(:,K) * difRU(K,K);
+	      
+					hinvGak = h * invGa(k)
+					nconhk = 0
+					Miter = Mt - hinvGak * dfdy
+	c  				ToDo Berchnung    
+	c        		[L,U,p] = lu(Miter,'vector');
+	      
+	      			ndecomps = ndecomps + 1       
+	      			havrate = .false.
+	      
+	    		else                                
+	      			goto 90
+	      
+	    		endif
+	    	endif 
+
+	c    	% while true
+	90		nsteps = nsteps + 1;                  
+	  
+	  		dif(:,k+2) = difkp1 - dif(:,k+1);
+	  		dif(:,k+1) = difkp1;
+	c  		for j = k:-1:1
+	c    		dif(:,j) = dif(:,j) + dif(:,j+1);
+	c  		end
+			do 95 j = k, 1, -1
+	95			dif(:,j) = dif(:,j) + dif(:,j+1)
+
+			if (done = .true.) then
+				goto 97
+			end if
+
+			klast = k
+	  		abshlast = absh
+	  		nconhk = min(nconhk + 1, maxk + 2)
+
+	  		if (nconhk .GE. k + 2) then
+	    		temp = 1.2*(err/rtol)**(1/(k + 1))
+	    		if (temp .GT. 0.1) then
+	      			hopt = absh / temp
+	    		else
+	      			hopt = 10*absh
+	    		end if
+	    		kopt = k;
+	    		if (k .GT. 1) then
+	      	 		errkm1 = normInf(dif(:,k) * invwt) * erconst(k - 1)
+				    temp = 1.3*(errkm1/rtol)**(1/k)
+	      			if (temp .GT. 0.1) then
+	        			hkm1 = absh / temp
+	      			else
+	        			hkm1 = 10*absh;
+	      			end if
+	      			if (hkm1 .GT. hopt) then
+	        			hopt = hkm1
+	        			kopt = k - 1
+	      			end if
+	    		end if
+	    		if (k .LT. maxk) then
+	      			errkp1 = normInf(dif(:,k+2) * invwt) * erconst(k+1)
+	      			temp = 1.4*(errkp1/rtol)^(1/(k+2))
+	      			if (temp .GT. 0.1) then
+	        			hkp1 = absh / temp
+	      			else
+	        			hkp1 = 10*absh
+	      			end if
+	      			if (hkp1 .GT. hopt) then
+	        			hopt = hkp1;
+	        			kopt = k + 1;
+	      			end if
+	    		end if
+	    		if (hopt .GT. absh) then
+	      			absh = hopt
+	      			if (k .NE. kopt) then
+	        			k = kopt
+	c 				ToDo: verify this        		
+	        			m = 1:k 
+	      			end if
+	    		endif
+	  		end if
+	c 		Advance the integration one step.
+	  		t = tnew
+	  		y = ynew
+	  		goto 98
+
+97		
+100		end subroutine
