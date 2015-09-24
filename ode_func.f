@@ -15,9 +15,12 @@
 	2		vec(n_var), u(n_contr), 
 	3		Mout(n_state, n_state), Nout(n_state, n_contr)
 
-		call helperCreateMatrizen(Y, state, Min, Nin)
 
-		vec = 0		
+        call helperCreateMatrizen(Y, state, Min, Nin)
+
+        T = 0
+		vec = 0
+		YDOT = 0
 
 		call dcopy(n_state, state, 1, vec, 1)
 		call dcopy(n_contr, u, 	   1, vec(n_state+1:n_var), 1)
@@ -33,10 +36,10 @@
 
 
 
-	SUBROUTINE JacFx(NEQ, T, Y, u, ML, MU, PD, NROWPD)
+	SUBROUTINE JacFx(NEQ, T, Y, u, PD, NROWPD)
 
 c 		Uebergabeparameter
-		INTEGER  NEQ, ML, MU, NRWOPD
+		INTEGER  NEQ, NROWPD
 		DOUBLE PRECISION  T, Y, u, PD
 
 c 		Konstanten
@@ -49,8 +52,7 @@ c 		in-Funktionaufrufvariablen
 		double precision F, M, N
 c 		helper Variablen
 		double precision JacM, HessM, Hx, 
-	1		Msp, Nsp, Jx, Mx, Nx,
-	2		MxTmp, NxTmp, NxTmp1
+	1		Msp, Nsp, Jx, MxTmp, NxTmp
 
 c 		zentrale Speicher
 		double precision vec
@@ -80,11 +82,13 @@ c 		Rueckgabewerte der in - Funktionsaufrufe
 c 		Helper Variablen	
 		dimension Jx(n_state, n_state), Hx(n_state, n_state, n_state),
 	1		Msp(n_state), Nsp(n_state),
-	2		MxTmp(n_state, n_state), NxTmp(n_state, n_state),
-	3		NxTmp1(n_state, n_state)
+	2		MxTmp(n_state, n_state), NxTmp(n_state, n_state)
 
 c 		zentrale Speicher
 		dimension vec(n_var)
+
+		T = 0
+		PD = 0
 
 c 		Generiere die Matrizen M, N		
 		call helperCreateMatrizen(Y, F, M, N)
@@ -160,11 +164,6 @@ c 			mkl_dimatcopy(ordering, trans, rows, cols, alpha, ab, lda, ldb)
 	end SUBROUTINE
 
 
-	SUBROUTINE helperOdeTest (NEQ, T, Y, YDOT) 
-	
-	end SUBROUTINE
-
-	
 *     Auxiliary routine: printing a matrix.
 *
 	SUBROUTINE PRINT_MATRIX( DESC, M, N, A, LDA )
@@ -191,7 +190,7 @@ c   C:= A * B + C (mxk * k x n = nxm )
 	SUBROUTINE multiM(m, k, n, A, B, C) 
 		INTEGER          m, k, n
 		double precision A, B, C
-		double precision alpha, beta
+		double precision beta
 		parameter (beta= 0.0)
 		dimension A(m, k), B(k, n), C(m, n)
 
@@ -252,7 +251,8 @@ c		CALL DGEMM('N','N', n_state, n_state, n_contr, alpha, Jx, n_state, Nin, n_con
 	end SUBROUTINE
 
 	SUBROUTINE helperCreateMatrizen(Y, state, M, N)
-		integer n_state, n_contr M_size, N_size
+		integer n_state, n_contr, M_size, N_size,
+	1       LDAM, LDBM, LDAN, LDBN
 
 		double precision Y
 		double precision state, M, N
@@ -277,8 +277,9 @@ c		CALL DGEMM('N','N', n_state, n_state, n_contr, alpha, Jx, n_state, Nin, n_con
 
 
 	SUBROUTINE helperCreateVektor(state, M, N, Y)
-		integer n_state, n_contr, M0_size, N0_size
-		integer tmp 
+		integer n_state, n_contr, M_size, N_size, LDAM, LDBM, LDAN,
+	1	LDBN
+
 		double precision state, M, N
 		double precision Y
 
@@ -293,7 +294,7 @@ c		CALL DGEMM('N','N', n_state, n_state, n_contr, alpha, Jx, n_state, Nin, n_con
 c       call dcopy(n, x, incx, y, incy) y:=x		
 		call dcopy(n_state, state, 1, Y, 1)
 
-		Y(LDAM:LDBM) =	reshape(M, (/M0_size/))
-		Y(LDAN:LDBN) = reshape(N, (/N0_size/))
+		Y(LDAM:LDBM) =	reshape(M, (/M_size/))
+		Y(LDAN:LDBN) = reshape(N, (/N_size/))
 
 	end SUBROUTINE

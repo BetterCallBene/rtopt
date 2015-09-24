@@ -1,9 +1,9 @@
 		program rtopt
-		use omp_lib
-		use mkl_service
+c		use omp_lib
+c		use mkl_service
 cDEC$ DEFINE debug=1		
 
-c		implicit none
+		implicit none
 
 c 		Wichtig FEX als external deklarien sonst segment fault
 c 		Externe Funktionen (Pointer)
@@ -18,7 +18,7 @@ c 		Speichervariablen
 		double precision vec, state
 
 c 		Zaehlervariablen
-		integer i, j, timepoint, IOUT
+		integer i, IOUT
 
 c 		current controls
 		double precision u	
@@ -26,20 +26,18 @@ c 		current controls
 c 		Initial Matrizen M0, N0
 		double precision M0, N0
 
-		double precision Y
-		double precision F, M, N
+		double precision Y, T
 
 c 		Normen
-		double precision dnrmF, nrm2v, invNrm2v
+		double precision nrm2v, invNrm2v
 
 c   	Time and Stepsize
-		double precision T, TOUT, h
-		double precision tspan
+		double precision h
 
 c 		Parameter fuer solver
-		integer ITASK, ISTATE, LRW, MF, 
-	1		ITOL, IOPT, IWORK, LIW
-		double precision RTOL, ATOL, RWORK
+		integer LRW, MF,
+	1		ITOL, LIW
+		double precision RTOL, ATOL
 
 c 		Funktionen 
 		double precision dnrm2, dlange
@@ -47,17 +45,14 @@ c 		Helper
 		double precision tmpQ, alpha
 
 c 		cpu time
-		double precision start_time, end_time
+c		double precision start_time, end_time
 
 		double precision anaPD, numPD, sumPD
 
 		double precision nrmMatrix
 
-		integer ML, MU
-		
-
 		parameter(n_state = 13, n_var = 17, n_contr = 4, 
-	1		n_q1 = 4, n_q2 = 7, n_intervals = 10000, 
+	1		n_q1 = 4, n_q2 = 7, n_intervals = 20,
 	2		inc = 1, n_vec = n_var * (n_intervals + 1),
 	3		NEQ = 234, LRW = 22 +  9*NEQ + NEQ**2, 
 	4 		LIW = 20 + NEQ, MF = 21)
@@ -70,20 +65,12 @@ c 		helper
 
 c 		Speichervariablen
 		dimension vec(n_vec), state(n_state), u(n_contr)
-		dimension Y(NEQ), RWORK(LRW), IWORK(LIW)
+		dimension Y(NEQ)
 
 		dimension anaPD(NEQ, NEQ), numPD(NEQ, NEQ), sumPD(NEQ, NEQ)
 
-c		dimension Y(NEQ), YDOT(NEQ), u(n_contr), F(n_state),
-c	1		anaPD(NEQ, NEQ), numPD(NEQ, NEQ),
-c	2		PD(NEQ, NEQ)
-
-		dimension F(n_state), M(n_state, n_state), N(n_state, n_contr),
-	1		J(n_state, n_var)
-
-c 		Initial Matrizen M0, N0
+c	    Initial Matrizen M0, N0
 		dimension M0(n_state, n_state), N0(n_state, n_contr)
-		dimension tspan(2)
 
 		dimension tmpQ(n_contr)
 
@@ -97,11 +84,9 @@ c 		Init M0, N0
 
 		call rand(n_vec, vec)
 
-		
+		T = 0
+c		call cpu_time(start_time)
 
-		call cpu_time(start_time)
-c$OMP PARALLEL DEFAULT(PRIVATE) SHARED(vec)
-c$OMP DO
 		do 40 IOUT = 1, n_intervals
 
 			state = vec((IOUT - 1) * n_var +1:
@@ -119,29 +104,18 @@ c 		Normierung der Quaternionen
 			call daxpy(n_q1, invNrm2v, state(n_q1:n_q2), inc, tmpQ, inc)
 			state(n_q1:n_q2) = 0
 			call daxpy(n_q1, alpha, tmpQ, inc, state(n_q1:n_q2), inc)
-c 		Ende
-c
 			call helperCreateVektor(state, M0, N0, Y)
-			call diff_nD(Y, FEX, NEQ, numPD)
-c
-c			print *, numPD
-c
-			call JacFx(NEQ, T, Y, ML, MU, anaPD, NEQ)
+
+			call JacFx(NEQ, T, Y, u, anaPD, NEQ)
+			call diff_nD1(NEQ, Y, u, FEX, numPD)
+
 			sumPD = numPD - anaPD
-
 			nrmMatrix = dlange( 'F', NEQ, NEQ, sumPD, NEQ, 0 )
-
 			print *, 'Norm Matrix=', nrmMatrix
 40			continue
-c$OMP END DO 		
-c$OMP END PARALLEL
-		call cpu_time(end_time)
-		print *, end_time -start_time
+c		call cpu_time(end_time)
+c		print *, end_time -start_time
 		STOP
-80		WRITE(6,90)  ISTATE
-90			FORMAT(///' Error halt.. ISTATE =',I3)
-		STOP
-
 
 	end program rtopt
 

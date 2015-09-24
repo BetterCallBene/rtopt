@@ -453,7 +453,7 @@ c           parameter (g = 9.81, Iges = (/0.0093886, 0.0093886, 0.018406/), m = 
 
       SUBROUTINE getTestData(DMat)
             DOUBLE PRECISION DMat
-            dimension DMat(234, 1)
+            dimension DMat(51, 1)
             DMat = 0
 
       DMat(1,1) = 0.545886208890829838D0

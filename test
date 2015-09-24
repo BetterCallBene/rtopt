@@ -156,65 +156,65 @@ c Janalytic = isempty(Joptions);
 			y = Y0;
 
 			yp0_OK = false;
-DAE = false;
-RowScale = [];
-if Mtype > 0
-  nz = nnz(Mt);
-  if nz == 0
-    error(message('MATLAB:ode15s:MassMatrixAllZero'))
-  end
+c DAE = false;
+c RowScale = [];
+c if Mtype > 0
+c  nz = nnz(Mt);
+c  if nz == 0
+c    error(message('MATLAB:ode15s:MassMatrixAllZero'))
+c  end
    
-  Msingular = odeget(options,'MassSingular','maybe','fast');
-  switch Msingular
-    case 'no',     DAE = false;
-    case 'yes',    DAE = true;
-    case 'maybe',  DAE = (eps*nz*condest(Mt) > 1);       
-  end
+c  Msingular = odeget(options,'MassSingular','maybe','fast');
+ c switch Msingular
+ c   case 'no',     DAE = false;
+ c   case 'yes',    DAE = true;
+c    case 'maybe',  DAE = (eps*nz*condest(Mt) > 1);       
+c  end
    
-  if DAE
-    yp0 = odeget(options,'InitialSlope',[],'fast');
-    if isempty(yp0)
-      yp0_OK = false;
-      yp0 = zeros(neq,1);  
-    else
-      yp0 = yp0(:);
-      if length(yp0) ~= neq
-        error(message('MATLAB:ode15s:YoYPoLengthMismatch'));
-      end
-      % Test if (y0,yp0) are consistent enough to accept.
-      yp0_OK = (norm(Mt*yp0 - f0) <= 1e-3*rtol*max(norm(Mt*yp0),norm(f0)));
-    end   
-    if ~yp0_OK           % Must compute ICs, so classify them.
-      if Mtype >= 3  % state dependent
-        ICtype = 3;
-      else  % M, M(t)
-        % Test for a diagonal mass matrix.
-        [r,c] = find(Mt);
-        if isequal(r,c)   % diagonal
-          ICtype = 1;
-        elseif ~issparse(Mt) % not diagonal but full
-          ICtype = 2;
-        else  % sparse, not diagonal
-          ICtype = 3;
-        end
-      end      
-    end
-  end
-end
-Mcurrent = true;
-Mtnew = Mt;
+c  if DAE
+c    yp0 = odeget(options,'InitialSlope',[],'fast');
+c    if isempty(yp0)
+c      yp0_OK = false;
+c      yp0 = zeros(neq,1);  
+c   else
+c      yp0 = yp0(:);
+c      if length(yp0) ~= neq
+c        error(message('MATLAB:ode15s:YoYPoLengthMismatch'));
+c      end
+c      % Test if (y0,yp0) are consistent enough to accept.
+c      yp0_OK = (norm(Mt*yp0 - f0) <= 1e-3*rtol*max(norm(Mt*yp0),norm(f0)));
+c    end   
+c    if ~yp0_OK           % Must compute ICs, so classify them.
+c      if Mtype >= 3  % state dependent
+c        ICtype = 3;
+c      else  % M, M(t)
+c        % Test for a diagonal mass matrix.
+c        [r,c] = find(Mt);
+c        if isequal(r,c)   % diagonal
+c          ICtype = 1;
+c        elseif ~issparse(Mt) % not diagonal but full
+c          ICtype = 2;
+c        else  % sparse, not diagonal
+c          ICtype = 3;
+c        end
+c      end      
+c    end
+c  end
+cend
+c Mcurrent = true;
+c Mtnew = Mt;
 
-% if not set via 'options', initialize constant Jacobian here
-if Jconstant 
-  if isempty(Jac) % use odenumjac
-    [Jac,Joptions.fac,nF] = odenumjac(odeFcn, {t0,y0,odeArgs{:}}, f0, Joptions);    
+c% if not set via 'options', initialize constant Jacobian here
+cif Jconstant 
+c  if isempty(Jac) % use odenumjac
+c    [Jac,Joptions.fac,nF] = odenumjac(odeFcn, {t0,y0,odeArgs{:}}, f0, Joptions);    
     nfevals = nfevals + nF;
-    npds = npds + 1;
-  elseif ~isa(Jac,'numeric')  % not been set via 'options'  
-    Jac = feval(Jac,t0,y0,Jargs{:}); % replace by its value
-    npds = npds + 1;
-  end
-end
+c    npds = npds + 1;
+c  elseif ~isa(Jac,'numeric')  % not been set via 'options'  
+c    Jac = feval(Jac,t0,y0,Jargs{:}); % replace by its value
+c    npds = npds + 1;
+c  end
+cend
 
 maxk = odeget(options,'MaxOrder',5,'fast');
 bdf = strcmp(odeget(options,'BDF','off','fast'),'on');
